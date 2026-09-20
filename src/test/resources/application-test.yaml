@@ -1,0 +1,38 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driverClassName: "org.h2.Driver"
+    username: sa
+    password: ""
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    hibernate:
+      ddl-auto: create
+    generate-ddl: true
+    database-platform: org.hibernate.dialect.H2Dialect
+  data:
+    redis:
+      host: "${REDIS_HOST:localhost}"
+      port: "${REDIS_PORT:6379}"
+      username: "${REDIS_USERNAME:default}"
+      password: "${REDIS_PASSWORD:}"
+
+api:
+  security:
+    token:
+      secret: "${JWT_SECRET:MY-SECRET-KEY}"
+
+auth0:
+  issuer-uri: "${AUTH0_ISSUER_URI:https://example.auth0.com/}"
+  audience: "${AUTH0_AUDIENCE:test-audience}"
+  client:
+    id: "${AUTH0_CLIENT_ID:test-client-id}"
+    secret: "${AUTH0_CLIENT_SECRET:test-client-secret}"
+
+cloudinary:
+  cloud-name: "${CLOUDINARY_CLOUD_NAME:test-cloud}"
+  api-key: "${CLOUDINARY_API_KEY:test-key}"
+  api-secret: "${CLOUDINARY_API_SECRET:test-secret}"

@@ -12,7 +12,7 @@ Write-Host $jwtSecret -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Configure como variavel de ambiente JWT_SECRET no Koyeb Dashboard." -ForegroundColor Green
 Write-Host ""
-Write-Host "Para testar localmente, adicione ao seu .env ou application-local.properties:" -ForegroundColor Blue
+Write-Host "Para testar localmente, adicione ao seu .env ou application-local.yaml:" -ForegroundColor Blue
 Write-Host "JWT_SECRET=$jwtSecret" -ForegroundColor Gray
 
 try {

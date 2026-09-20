@@ -1,0 +1,88 @@
+
+spring:
+  profiles:
+    default: local
+  application:
+    name: CodeBlog
+
+feed:
+  recent-posts-days: 7
+  seed-interval-ms: 120000
+  max-posts-fetch-limit: 500
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: "${DATABASE_URL}"
+    username: "${DATABASE_USERNAME}"
+    password: "${DATABASE_PASSWORD}"
+    driver-class-name: "org.postgresql.Driver"
+    hikari:
+      data-source-properties:
+        sslmode: require
+      maximum-pool-size: 5
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  jpa:
+    properties:
+      hibernate:
+        jdbc:
+          lob:
+            non_contextual_creation: true
+        format_sql: false
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  data:
+    redis:
+      host: "${REDIS_HOST:localhost}"
+      port: "${REDIS_PORT:6379}"
+      username: "${REDIS_USERNAME:default}"
+      password: "${REDIS_PASSWORD:}"
+      ssl:
+        enabled: "${REDIS_SSL:false}"
+
+server:
+  port: "${PORT:8080}"
+
+api:
+  security:
+    token:
+      secret: "${JWT_SECRET}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+  health:
+    db:
+      enabled: true
+    redis:
+      enabled: true
+
+logging:
+  level:
+    blog.code.codeblog: INFO
+    org.springframework: WARN
+    org.hibernate: WARN
+
+auth0:
+  issuer-uri: "${AUTH0_ISSUER_URI}"
+  audience: "${AUTH0_AUDIENCE}"
+  client:
+    id: "${AUTH0_CLIENT_ID}"
+    secret: "${AUTH0_CLIENT_SECRET}"
+
+cloudinary:
+  cloud-name: "${CLOUDINARY_CLOUD_NAME}"
+  api-key: "${CLOUDINARY_API_KEY}"
+  api-secret: "${CLOUDINARY_API_SECRET}"

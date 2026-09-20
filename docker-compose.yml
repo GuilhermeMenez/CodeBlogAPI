@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${DATABASE_USERNAME:-codeblog_user}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-change_me}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -32,43 +32,6 @@ services:
       timeout: 3s
       retries: 5
 
-  codeblog-app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: codeblog-api:local
-    container_name: codeblog-api
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-      PORT: 8080
-      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-codeblog}
-      DATABASE_SSLMODE: disable
-      DATABASE_USERNAME: ${DATABASE_USERNAME:-codeblog_user}
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-change_me}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_USERNAME: ${REDIS_USERNAME:-default}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      JWT_SECRET: ${JWT_SECRET:-change_this_jwt_secret}
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
-    ports:
-      - "8080:8080"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
-      interval: 20s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
-
 volumes:
   postgres_data:
   redis_data:
-
