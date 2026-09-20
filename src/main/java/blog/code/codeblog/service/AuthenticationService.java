@@ -10,6 +10,7 @@ import blog.code.codeblog.model.User;
 import blog.code.codeblog.service.integration.Auth0ServiceIntergration;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.stereotype.Service;
@@ -19,22 +20,17 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthenticationService {
 
-    private final UserService userService;
-    private final TokenService tokenService;
-    private final AuthenticationManager authenticationManager;
-    private final Auth0ServiceIntergration auth0ServiceIntergration;
+    @Autowired
+    private UserService userService;
 
-    public AuthenticationService(
-            UserService userService,
-            TokenService tokenService,
-            AuthenticationManager authenticationManager,
-            Auth0ServiceIntergration auth0ServiceIntergration) {
-        this.userService = userService;
-        this.tokenService = tokenService;
-        this.authenticationManager = authenticationManager;
-        this.auth0ServiceIntergration = auth0ServiceIntergration;
-    }
+    @Autowired
+    private TokenService tokenService;
 
+    @Autowired
+    private AuthenticationManager authenticationManager;
+
+    @Autowired
+    private Auth0ServiceIntergration auth0ServiceIntergration;
 
 
     public RegisterResponseDTO register(CreateUserCommand cmd) {
