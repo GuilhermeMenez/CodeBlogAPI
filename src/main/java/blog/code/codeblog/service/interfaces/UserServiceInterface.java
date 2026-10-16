@@ -2,7 +2,6 @@ package blog.code.codeblog.service.interfaces;
 
 import blog.code.codeblog.command.user.*;
 import blog.code.codeblog.dto.PageResponseDTO;
-import blog.code.codeblog.dto.cloudinary.ImageUploadResponseDTO;
 import blog.code.codeblog.dto.user.UpdateUserResponseDTO;
 import blog.code.codeblog.dto.user.UserFollowDTO;
 import blog.code.codeblog.dto.user.UserResponseDTO;
@@ -18,7 +17,6 @@ public interface UserServiceInterface {
     User saveUser(CreateUserCommand user);
     UpdateUserResponseDTO updateUser(UpdateUserCommand command);
     void deleteUser(DeleteUserCommand command);
-    ImageUploadResponseDTO saveUploadProfilePic(UUID userId, String profilePicUrl, String profilePicId);
     void follow(FollowCommand command);
     void unfollow(UnfollowCommand command);
     User getReference(UUID id);

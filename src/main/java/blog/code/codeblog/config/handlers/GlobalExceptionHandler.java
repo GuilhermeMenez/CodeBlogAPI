@@ -10,6 +10,8 @@ import org.springframework.security.authentication.AuthenticationCredentialsNotF
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 
 
 
@@ -44,6 +46,16 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+    }
+
+    @ExceptionHandler(AsyncRequestTimeoutException.class)
+    public void handleAsyncRequestTimeout(AsyncRequestTimeoutException ex, HttpServletRequest request) {
+        log.debug("Async request timed out: {}", request.getRequestURI());
+    }
+
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleAsyncRequestNotUsable(AsyncRequestNotUsableException ex, HttpServletRequest request) {
+        log.debug("Client disconnected: {} - {}", request.getRequestURI(), ex.getMessage());
     }
 
     @ExceptionHandler(IOException.class)

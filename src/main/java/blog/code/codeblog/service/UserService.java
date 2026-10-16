@@ -3,17 +3,25 @@ package blog.code.codeblog.service;
 import blog.code.codeblog.command.user.*;
 import blog.code.codeblog.dto.PageResponseDTO;
 import blog.code.codeblog.dto.cloudinary.ImageUploadResponseDTO;
-import blog.code.codeblog.dto.user.*;
+import blog.code.codeblog.dto.user.UpdateUserResponseDTO;
+import blog.code.codeblog.dto.user.UserFollowDTO;
+import blog.code.codeblog.dto.user.UserResponseDTO;
 import blog.code.codeblog.enums.AuthFlow;
 import blog.code.codeblog.enums.FlowImageFlag;
 import blog.code.codeblog.mapper.PageMapper;
 import blog.code.codeblog.mapper.UserMapper;
+import blog.code.codeblog.messaging.event.ImageUploadCompletedEvent;
+import blog.code.codeblog.messaging.event.ImageUploadEvent;
+import blog.code.codeblog.messaging.event.UserFollowedEvent;
+import blog.code.codeblog.messaging.publisher.CloudinaryUploadPublisher;
+import blog.code.codeblog.messaging.publisher.UserFollowPublisher;
 import blog.code.codeblog.model.User;
 import blog.code.codeblog.model.UserFollow;
 import blog.code.codeblog.repository.UserFollowRepository;
 import blog.code.codeblog.repository.UserRepository;
 import blog.code.codeblog.service.interfaces.UserServiceInterface;
 import jakarta.persistence.EntityNotFoundException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -22,17 +30,15 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.security.access.AccessDeniedException;
-
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
-
-import lombok.extern.slf4j.Slf4j;
 
 import static blog.code.codeblog.config.RedisConfig.*;
 
@@ -49,10 +55,12 @@ public class UserService implements UserServiceInterface {
     PasswordEncoder bCryptPasswordEncoder;
 
     @Autowired
-    private CloudinaryService cloudinaryService;
+    CloudinaryUploadPublisher cloudinaryUploadPublisher;
+
+
 
     @Autowired
-    TokenService tokenService;
+    UserFollowPublisher userFollowPublisher;
 
     @Override
     public Optional<User> findById(UUID id) {
@@ -78,13 +86,13 @@ public class UserService implements UserServiceInterface {
 
 
     @Override
-    public User findByLogin(String login){
+    public User findByLogin(String login) {
         log.info("[findByLogin] Attempting to find user by login: {}", login);
         return userRepository.findByLogin(login);
     }
 
     @Override
-    public User saveUser(CreateUserCommand user){
+    public User saveUser(CreateUserCommand user) {
         log.info("[saveUser] Saving user with login: {}", user.getEmail());
 
         if (user.getFlow() == AuthFlow.OTP) {
@@ -105,16 +113,22 @@ public class UserService implements UserServiceInterface {
         if (user.getProfileImage() != null && !user.getProfileImage().isEmpty()) {
             log.info("[register] Processing profile image for user: {}", newUser.getId());
             try {
-                cloudinaryService.uploadFile(user.getProfileImage(), FlowImageFlag.PROFILE, newUser.getId().toString(), null);
-                saveUploadProfilePic(newUser.getId(), newUser.getUrlProfilePic(), newUser.getProfilePicId());
-                log.info("[register] Profile image uploaded and saved successfully for user: {}", newUser.getId());
+                log.info("[saveUser] Publishing profile image upload for user: {}", newUser.getId());
+                cloudinaryUploadPublisher.publishImageUpload(ImageUploadEvent.builder()
+                        .flag(FlowImageFlag.PROFILE)
+                        .userId(newUser.getId())
+                        .content(user.getProfileImage().getBytes())
+                        .originalFilename(user.getProfileImage().getOriginalFilename())
+                        .occurredAt(LocalDateTime.now())
+                        .build());
             } catch (IOException e) {
-                log.error("[register] Failed to upload profile image for user: {}. Error: {}", newUser.getId(), e.getMessage());
+                log.error("[saveUser] Failed to read profile image for user: {}. Error: {}", newUser.getId(), e.getMessage());
             }
         }
         return newUser;
     }
 
+    //todo alterar para permitir o upload de fotos
     @Override
     @Transactional
     @CacheEvict(value = USER_CACHE, key = "#command.userId")
@@ -127,8 +141,8 @@ public class UserService implements UserServiceInterface {
                     return new EntityNotFoundException("User not found");
                 });
 
-        if (command.getName() != null)     existingUser.setName(command.getName());
-        if (command.getEmail() != null)    existingUser.setLogin(command.getEmail());
+        if (command.getName() != null) existingUser.setName(command.getName());
+        if (command.getEmail() != null) existingUser.setLogin(command.getEmail());
         if (command.getPassword() != null) existingUser.setPassword(bCryptPasswordEncoder.encode(command.getPassword()));
 
         log.info("[updateUser] User updated successfully. id: {}", command.getUserId());
@@ -153,11 +167,17 @@ public class UserService implements UserServiceInterface {
     }
 
 
-    @CacheEvict(value = USER_CACHE, key = "#userId")
-    public ImageUploadResponseDTO saveUploadProfilePic(UUID userId, String profilePicUrl, String profilePicId) throws AccessDeniedException {
+    @CacheEvict(value = USER_CACHE, key = "#event.userId()")
+    public void onProfileImageUploaded(ImageUploadCompletedEvent event) {
+        saveUploadProfilePic(event.userId(), event.imageUrl(), event.publicId());
+    }
+
+
+    private ImageUploadResponseDTO saveUploadProfilePic(UUID userId, String profilePicUrl, String profilePicId) throws AccessDeniedException {
         log.info("[updateProfilePic] Attempting to update profile pic for user with id: {}", userId);
 
-        User existingUser = getAuthorizedUser(userId);
+        User existingUser = findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + userId));
 
         existingUser.setUrlProfilePic(profilePicUrl);
         existingUser.setProfilePicId(profilePicId);
@@ -176,7 +196,7 @@ public class UserService implements UserServiceInterface {
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = FOLLOWERS_CACHE, allEntries = true),
-            @CacheEvict(value = FOLLOWING_CACHE,  allEntries = true)
+            @CacheEvict(value = FOLLOWING_CACHE, allEntries = true)
     })
     public void follow(FollowCommand command) {
         validateNotSameUser(command.getFollowerId(), command.getFollowedId());
@@ -193,13 +213,22 @@ public class UserService implements UserServiceInterface {
             throw new IllegalStateException("User already follows this user");
         }
         log.info("[follow] Follow operation successful. followerId: {}, followedId: {}", command.getFollowerId(), command.getFollowedId());
+
+        userFollowPublisher.publishUserFollowed(UserFollowedEvent.builder()
+                .followerId(follower.getId())
+                .followerName(follower.getName())
+                .followedId(followed.getId())
+                .followedName(followed.getName())
+                .occurredAt(java.time.LocalDateTime.now())
+                .build());
+
     }
 
     @Override
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = FOLLOWERS_CACHE, allEntries = true),
-            @CacheEvict(value = FOLLOWING_CACHE,  allEntries = true)
+            @CacheEvict(value = FOLLOWING_CACHE, allEntries = true)
     })
     public void unfollow(UnfollowCommand command) {
         log.info("[unfollow] Attempting to unfollow user. followerId: {}, followedId: {}", command.getFollowerId(), command.getFollowedId());
@@ -221,7 +250,7 @@ public class UserService implements UserServiceInterface {
         }
     }
 
-    private User findUserOrThrow(UUID userId ) {
+    private User findUserOrThrow(UUID userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> {
                     log.warn("[findUserOrThrow] user not found. id: {}", userId);
@@ -230,11 +259,13 @@ public class UserService implements UserServiceInterface {
     }
 
     @Override
-    public User getReference(UUID id){
+    public User getReference(UUID id) {
         log.info("[getReference] Getting reference for user id: {}", id);
         return userRepository.getReferenceById(id);
     }
 
+
+    //todo jogar isso na fila também
     @Override
     @CacheEvict(value = USER_CACHE, allEntries = true)
     public boolean deleteProfilePic(String publicId) {
@@ -293,20 +324,5 @@ public class UserService implements UserServiceInterface {
     }
 
 
-    private User getAuthorizedUser(UUID userId) {
-        UUID userIdFromContext = tokenService.getUserIdFromContext();
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> {
-                    log.warn("[getAuthorizedUser] User not found. userId: {}", userId);
-                    return new EntityNotFoundException("User not found");
-                });
-
-        if (!user.getId().equals(userIdFromContext)) {
-            log.warn("[getAuthorizedUser] User not authorized for this action. userIdFromContext: {}, targetUserId: {}", userIdFromContext, userId);
-            throw new AccessDeniedException("User not authorized for this action");
-        }
-
-        return user;
-    }
 }

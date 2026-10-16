@@ -19,6 +19,10 @@ spring:
       port: "${REDIS_PORT:6379}"
       username: "${REDIS_USERNAME:default}"
       password: "${REDIS_PASSWORD:}"
+  rabbitmq:
+    listener:
+      simple:
+        default-requeue-rejected: false
 
 api:
   security:
