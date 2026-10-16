@@ -2,6 +2,7 @@ package blog.code.codeblog.config.security;
 
 import blog.code.codeblog.config.handlers.CustomAccessDeniedHandler;
 import blog.code.codeblog.config.handlers.CustomAuthenticationEntryPoint;
+import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -43,6 +44,9 @@ public class SecurityConfiguration {
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
+                        // o SseEmitter encerra a requisição num dispatch ASYNC, que chega sem autenticação
+                        // (API stateless); a requisição original do stream continua exigindo token
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers(
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
