@@ -6,6 +6,7 @@ import blog.code.codeblog.enums.AuthFlow;
 import blog.code.codeblog.enums.FlowImageFlag;
 import blog.code.codeblog.messaging.event.ImageUploadCompletedEvent;
 import blog.code.codeblog.messaging.event.ImageUploadEvent;
+import blog.code.codeblog.messaging.event.UserFollowedEvent;
 import blog.code.codeblog.messaging.publisher.CloudinaryUploadPublisher;
 import blog.code.codeblog.messaging.publisher.UserFollowPublisher;
 import blog.code.codeblog.model.User;
@@ -45,6 +46,8 @@ class UserServiceTest {
     private TokenService tokenService;
     @Mock
     private CloudinaryUploadPublisher cloudinaryUploadPublisher;
+    @Mock
+    private UserFollowPublisher userFollowPublisher;
 
     @InjectMocks
     private UserService userService;
@@ -319,6 +322,11 @@ class UserServiceTest {
         assertDoesNotThrow(() -> userService.follow(command));
 
         verify(userFollowRepository).save(any(UserFollow.class));
+
+        ArgumentCaptor<UserFollowedEvent> captor = ArgumentCaptor.forClass(UserFollowedEvent.class);
+        verify(userFollowPublisher).publishUserFollowed(captor.capture());
+        assertEquals(followerId, captor.getValue().getFollowerId());
+        assertEquals(followedId, captor.getValue().getFollowedId());
     }
 
     @Test
