@@ -50,7 +50,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AsyncRequestTimeoutException.class)
     public void handleAsyncRequestTimeout(AsyncRequestTimeoutException ex, HttpServletRequest request) {
-        log.debug("Async request timed out: {}", request.getRequestURI());
+        log.debug("Async request timed out: {} - {}", request.getRequestURI(), ex.getMessage());
     }
 
     @ExceptionHandler(AsyncRequestNotUsableException.class)
