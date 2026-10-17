@@ -23,6 +23,7 @@ spring:
     listener:
       simple:
         default-requeue-rejected: false
+        auto-startup: false
 
 api:
   security:

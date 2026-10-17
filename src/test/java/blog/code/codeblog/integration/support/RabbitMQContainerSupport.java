@@ -82,5 +82,6 @@ public abstract class RabbitMQContainerSupport extends RedisContainerSupport {
         });
         registry.add("spring.rabbitmq.username", () -> "guest");
         registry.add("spring.rabbitmq.password", () -> "guest");
+        registry.add("spring.rabbitmq.listener.simple.auto-startup", () -> "true");
     }
 }
