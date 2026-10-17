@@ -22,7 +22,7 @@
         <jjwt.version>0.12.6</jjwt.version>
         <java-jwt.version>4.5.0</java-jwt.version>
         <h2.version>2.3.232</h2.version>
-        <!-- 1.21+ negocia API >= 1.40; o 1.20.x fixa 1.32 e é recusado pelo Docker Engine 29 -->
+        <lombok.version>1.18.48</lombok.version>
         <testcontainers.version>1.21.4</testcontainers.version>
         <!-- Versões seguras para override de dependências transitivas com CVEs -->
         <spring-framework.version>6.2.13</spring-framework.version>
@@ -171,6 +171,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
         <!-- Database Drivers -->
         <dependency>
             <groupId>org.postgresql</groupId>
@@ -271,7 +276,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.32</version>
+            <version>${lombok.version}</version>
             <scope>provided</scope>
         </dependency>
         <!-- Testes -->
@@ -323,7 +328,7 @@
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
-                            <version>1.18.32</version>
+                            <version>${lombok.version}</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>

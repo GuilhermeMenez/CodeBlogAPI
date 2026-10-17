@@ -9,6 +9,9 @@ import blog.code.codeblog.dto.cloudinary.ImageUploadResponseDTO;
 import blog.code.codeblog.dto.comment.CommentResponseDTO;
 import blog.code.codeblog.dto.post.PostResponseDTO;
 import blog.code.codeblog.enums.FlowImageFlag;
+import blog.code.codeblog.messaging.event.ImageUploadCompletedEvent;
+import blog.code.codeblog.messaging.event.ImageUploadEvent;
+import blog.code.codeblog.messaging.publisher.CloudinaryUploadPublisher;
 import blog.code.codeblog.model.Comment;
 import blog.code.codeblog.model.Post;
 import blog.code.codeblog.model.User;
@@ -28,10 +31,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -51,6 +56,8 @@ public class PostService implements PostServiceInterface {
     CommentRepository commentRepository;
     @Autowired
     UserFollowRepository userFollowRepository;
+    @Autowired
+    CloudinaryUploadPublisher cloudinaryUploadPublisher;
 
     @Override
     public List<PostResponseDTO> findAll() {
@@ -149,25 +156,42 @@ public class PostService implements PostServiceInterface {
         return PostMapper.toPostResponseDTO(existingPost);
     }
 
-    @Caching(evict = {
-            @CacheEvict(value = POST_CACHE, key = "#savePostImageCommand.postId"),
-            @CacheEvict(value = USER_POSTS_CACHE, allEntries = true)
-    })
     public ImageUploadResponseDTO savePostImage(SavePostImageCommand savePostImageCommand) throws IOException {
         Post post = getUserPost(savePostImageCommand.getPostId(), savePostImageCommand.getAuthor().getId());
-        log.info("[uploadImage] Uploading image for: {}", savePostImageCommand.getPostId());
+        log.info("[savePostImage] Publishing image upload for postId: {}", savePostImageCommand.getPostId());
 
-        var uploadResponse = cloudinaryService.uploadFile(savePostImageCommand.getFile(), FlowImageFlag.POST, post.getUser().getId().toString(), savePostImageCommand.getPostId().toString());
+        cloudinaryUploadPublisher.publishImageUpload(ImageUploadEvent.builder()
+                .flag(FlowImageFlag.POST)
+                .userId(post.getUser().getId())
+                .postId(post.getId())
+                .content(savePostImageCommand.getFile().getBytes())
+                .originalFilename(savePostImageCommand.getFile().getOriginalFilename())
+                .occurredAt(LocalDateTime.now())
+                .build());
+
+        return ImageUploadResponseDTO.builder()
+                .message("Upload em processamento")
+                .build();
+    }
+
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = POST_CACHE, key = "#event.postId()"),
+            @CacheEvict(value = USER_POSTS_CACHE, allEntries = true)
+    })
+    public void onPostImageUploaded(ImageUploadCompletedEvent event) {
+        Post post = postRepository.findById(event.postId())
+                .orElseThrow(() -> {
+                    log.warn("[onPostImageUploaded] Post not found. postId: {}", event.postId());
+                    return new EntityNotFoundException("Post not found");
+                });
 
         if (post.getImages() == null)
             post.setImages(new HashMap<>());
 
-
-        post.getImages().put(uploadResponse.publicId(), uploadResponse.imageUrl());
+        post.getImages().put(event.publicId(), event.imageUrl());
         postRepository.save(post);
-        log.info("[saveImage] Image uploaded for postId: {}", savePostImageCommand.getPostId());
-
-        return uploadResponse;
+        log.info("[onPostImageUploaded] Image saved for postId: {}", event.postId());
     }
 
 

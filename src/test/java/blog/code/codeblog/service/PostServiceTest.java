@@ -6,7 +6,12 @@ import blog.code.codeblog.command.post.DeletePostImageCommand;
 import blog.code.codeblog.command.post.GetAllUserPostsCommand;
 import blog.code.codeblog.command.post.GetPostCommentsCommand;
 import blog.code.codeblog.command.post.PutPostCommand;
+import blog.code.codeblog.command.post.SavePostImageCommand;
 import blog.code.codeblog.dto.post.PostResponseDTO;
+import blog.code.codeblog.enums.FlowImageFlag;
+import blog.code.codeblog.messaging.event.ImageUploadCompletedEvent;
+import blog.code.codeblog.messaging.event.ImageUploadEvent;
+import blog.code.codeblog.messaging.publisher.CloudinaryUploadPublisher;
 import blog.code.codeblog.model.Comment;
 import blog.code.codeblog.model.Post;
 import blog.code.codeblog.model.User;
@@ -17,13 +22,16 @@ import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDate;
@@ -45,6 +53,8 @@ class PostServiceTest {
     private CommentRepository commentRepository;
     @Mock
     private CloudinaryService cloudinaryService;
+    @Mock
+    private CloudinaryUploadPublisher cloudinaryUploadPublisher;
     @InjectMocks
     private PostService postService;
 
@@ -82,6 +92,41 @@ class PostServiceTest {
 
         assertEquals(mockPost.getId().toString(), result);
         verify(postRepository).save(any(Post.class));
+        verifyNoInteractions(cloudinaryUploadPublisher);
+    }
+
+    @Test
+    @DisplayName("Should publish one upload event per image when creating post with images")
+    void createPostWithImagesShouldPublishEvents() {
+        UUID userId = UUID.randomUUID();
+        User author = new User();
+        author.setId(userId);
+        author.setName("Author");
+
+        List<MultipartFile> images = List.of(
+                new MockMultipartFile("images", "first.png", "image/png", new byte[]{1}),
+                new MockMultipartFile("images", "second.png", "image/png", new byte[]{2})
+        );
+
+        CreatePostCommand command = CreatePostCommand.builder()
+                .title("Test Title")
+                .content("Test Content")
+                .authorName("Author")
+                .author(author)
+                .images(images)
+                .build();
+
+        Post mockPost = new Post();
+        mockPost.setId(UUID.randomUUID());
+        mockPost.setUser(author);
+
+        when(postRepository.save(any(Post.class))).thenReturn(mockPost);
+        when(postRepository.findById(mockPost.getId())).thenReturn(Optional.of(mockPost));
+
+        String result = postService.createPost(command);
+
+        assertEquals(mockPost.getId().toString(), result);
+        verify(cloudinaryUploadPublisher, times(2)).publishImageUpload(any(ImageUploadEvent.class));
     }
 
     @Test
@@ -351,6 +396,99 @@ class PostServiceTest {
         assertFalse(result);
         verify(postRepository).findByImagePublicId(publicId);
         verify(postRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should publish image upload event and return processing message")
+    void savePostImageShouldPublishEvent() throws IOException {
+        UUID userId = UUID.randomUUID();
+        UUID postId = UUID.randomUUID();
+        User author = new User();
+        author.setId(userId);
+
+        Post post = new Post();
+        post.setId(postId);
+        post.setUser(author);
+
+        MockMultipartFile file = new MockMultipartFile("file", "image.png", "image/png", new byte[]{1, 2, 3});
+        SavePostImageCommand command = SavePostImageCommand.builder().postId(postId).file(file).author(author).build();
+
+        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+
+        var result = postService.savePostImage(command);
+
+        ArgumentCaptor<ImageUploadEvent> captor = ArgumentCaptor.forClass(ImageUploadEvent.class);
+        verify(cloudinaryUploadPublisher).publishImageUpload(captor.capture());
+        ImageUploadEvent event = captor.getValue();
+
+        assertEquals("Upload em processamento", result.message());
+        assertEquals(FlowImageFlag.POST, event.getFlag());
+        assertEquals(userId, event.getUserId());
+        assertEquals(postId, event.getPostId());
+        assertArrayEquals(new byte[]{1, 2, 3}, event.getContent());
+        assertEquals("image.png", event.getOriginalFilename());
+        assertNotNull(event.getOccurredAt());
+        verify(postRepository, never()).save(any(Post.class));
+        verifyNoInteractions(cloudinaryService);
+    }
+
+    @Test
+    @DisplayName("Should not publish image upload event when user is not the post author")
+    void savePostImageUnauthorizedShouldNotPublish() {
+        UUID postId = UUID.randomUUID();
+        User owner = new User();
+        owner.setId(UUID.randomUUID());
+        User otherUser = new User();
+        otherUser.setId(UUID.randomUUID());
+
+        Post post = new Post();
+        post.setId(postId);
+        post.setUser(owner);
+
+        MockMultipartFile file = new MockMultipartFile("file", "image.png", "image/png", new byte[]{1});
+        SavePostImageCommand command = SavePostImageCommand.builder().postId(postId).file(file).author(otherUser).build();
+
+        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+
+        assertThrows(AccessDeniedException.class, () -> postService.savePostImage(command));
+        verifyNoInteractions(cloudinaryUploadPublisher);
+    }
+
+    @Test
+    @DisplayName("Should add image to post when upload completed event is received")
+    void onPostImageUploadedShouldAddImage() {
+        UUID postId = UUID.randomUUID();
+        Post post = new Post();
+        post.setId(postId);
+        post.setImages(null);
+
+        ImageUploadCompletedEvent event = new ImageUploadCompletedEvent(FlowImageFlag.POST, UUID.randomUUID(), postId,
+                "https://cloudinary.com/post-image.jpg", "post_pics/post-image");
+
+        when(postRepository.findById(postId)).thenReturn(Optional.of(post));
+        when(postRepository.save(any(Post.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        postService.onPostImageUploaded(event);
+
+        assertEquals("https://cloudinary.com/post-image.jpg", post.getImages().get("post_pics/post-image"));
+        verify(postRepository).findById(postId);
+        verify(postRepository).save(post);
+    }
+
+    @Test
+    @DisplayName("Should throw EntityNotFoundException when upload completed event references non-existent post")
+    void onPostImageUploadedPostNotFoundShouldThrow() {
+        UUID postId = UUID.randomUUID();
+        ImageUploadCompletedEvent event = new ImageUploadCompletedEvent(FlowImageFlag.POST, UUID.randomUUID(), postId,
+                "https://cloudinary.com/post-image.jpg", "post_pics/post-image");
+
+        when(postRepository.findById(postId)).thenReturn(Optional.empty());
+
+        EntityNotFoundException exception = assertThrows(EntityNotFoundException.class,
+                () -> postService.onPostImageUploaded(event));
+
+        assertEquals("Post not found", exception.getMessage());
+        verify(postRepository, never()).save(any(Post.class));
     }
 
     @Test

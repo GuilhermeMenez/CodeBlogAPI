@@ -9,6 +9,20 @@ feed:
   recent-posts-days: 7
   seed-interval-ms: 120000
   max-posts-fetch-limit: 500
+
+app:
+  rabbitmq:
+    exchange: user.events.exchange
+    dead-letter-exchange: user.events.dlx
+    queue:
+      follow: user.follow.notification.queue
+      image-upload: image.upload.queue
+    dlq:
+      follow: user.follow.notification.dlq
+      image-upload: image.upload.dlq
+    routing-key:
+      follow: user.followed
+      image-upload: image.upload
 ---
 spring:
   config:
@@ -36,8 +50,8 @@ spring:
         format_sql: false
         dialect: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: update
-    show-sql: false
+      ddl-auto: create
+      show-sql: false
   data:
     redis:
       host: "${REDIS_HOST:localhost}"
@@ -46,6 +60,17 @@ spring:
       password: "${REDIS_PASSWORD:}"
       ssl:
         enabled: "${REDIS_SSL:false}"
+  rabbitmq:
+    host: "${RABBITMQ_HOST:localhost}"
+    port: "${RABBITMQ_PORT:5672}"
+    username: "${RABBITMQ_USER:guest}"
+    password: "${RABBITMQ_PASSWORD:guest}"
+    listener:
+      simple:
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
 
 server:
   port: "${PORT:8080}"

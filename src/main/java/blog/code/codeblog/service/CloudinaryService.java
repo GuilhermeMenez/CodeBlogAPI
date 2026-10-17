@@ -26,8 +26,12 @@ public class CloudinaryService implements CloudinaryServiceInterface {
     private final Cloudinary cloudinary;
 
     public ImageUploadResponseDTO uploadFile(MultipartFile file, FlowImageFlag flag, String userId, String postId) throws IOException {
+        return uploadFile(file.getBytes(), flag, userId, postId);
+    }
+
+    public ImageUploadResponseDTO uploadFile(byte[] content, FlowImageFlag flag, String userId, String postId) throws IOException {
         logUploadStart(flag, userId, postId);
-        return uploadToCloudinary(file, flag);
+        return uploadToCloudinary(content, flag);
     }
 
 
@@ -39,10 +43,10 @@ public class CloudinaryService implements CloudinaryServiceInterface {
     }
 
     @SuppressWarnings("unchecked")
-    private ImageUploadResponseDTO uploadToCloudinary(MultipartFile file, FlowImageFlag flag) throws IOException {
+    private ImageUploadResponseDTO uploadToCloudinary(byte[] content, FlowImageFlag flag) throws IOException {
         String folder = flag == FlowImageFlag.POST ? POST_FOLDER : PROFILE_FOLDER;
         try {
-            Map<String, Object> response = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap("folder", folder));
+            Map<String, Object> response = cloudinary.uploader().upload(content, ObjectUtils.asMap("folder", folder));
             log.info("Upload completed. PublicId: {}", response.get(PUBLIC_ID_KEY));
 
             return processUploadResult(response);

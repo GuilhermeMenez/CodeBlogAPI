@@ -100,7 +100,7 @@ class CloudinaryControllerTest {
         // Arrange
         MultipartFile file = createMockFile();
 
-        when(cloudinaryService.uploadFile(any(), any(), anyString(), isNull()))
+        when(cloudinaryService.uploadFile(any(MultipartFile.class), any(), anyString(), isNull()))
                 .thenThrow(new IOException("Upload failed"));
 
         // Act & Assert

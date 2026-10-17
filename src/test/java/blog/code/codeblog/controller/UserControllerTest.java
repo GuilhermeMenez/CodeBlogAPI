@@ -113,7 +113,7 @@ class UserControllerTest {
     @Test
     @DisplayName("Should follow user on behalf of current user")
     void followShouldDelegateToFacade() {
-        FollowUnfollowRequestDTO request = new FollowUnfollowRequestDTO(testUserId, UUID.randomUUID());
+        FollowUnfollowRequestDTO request = new FollowUnfollowRequestDTO(testUserId);
         when(userProvider.getCurrentUser()).thenReturn(currentUser);
 
         assertDoesNotThrow(() -> userController.follow(request));
@@ -123,7 +123,7 @@ class UserControllerTest {
     @Test
     @DisplayName("Should unfollow user on behalf of current user")
     void unfollowShouldDelegateToFacade() {
-        FollowUnfollowRequestDTO request = new FollowUnfollowRequestDTO(testUserId, UUID.randomUUID());
+        FollowUnfollowRequestDTO request = new FollowUnfollowRequestDTO(testUserId);
         when(userProvider.getCurrentUser()).thenReturn(currentUser);
 
         assertDoesNotThrow(() -> userController.unfollow(request));
