@@ -14,24 +14,35 @@ import org.testcontainers.utility.DockerImageName;
 
 import java.time.Duration;
 
-/**
- * Sobe um RabbitMQ efêmero (e o Redis, herdado de {@link RedisContainerSupport}, usado pelos @CacheEvict
- * acionados no callback do upload). Sem Docker, os testes são ignorados.
- */
+
 public abstract class RabbitMQContainerSupport extends RedisContainerSupport {
 
     private static final Logger log = LoggerFactory.getLogger(RabbitMQContainerSupport.class);
 
     private static final int AMQP_PORT = 5672;
 
+    private static final String HOST_PROPERTY = "rabbitmq.test.host";
+    private static final String PORT_PROPERTY = "rabbitmq.test.port";
+    private static final String HOST_ENV = "RABBITMQ_TEST_HOST";
+    private static final String PORT_ENV = "RABBITMQ_TEST_PORT";
+
     private static final String SKIP_MESSAGE =
-            "Nenhum RabbitMQ disponível para os testes de integração. Instale/inicie um Docker.";
+            "No RabbitMQ available for integration tests. Install/start Docker, or point "
+                    + "to a disposable RabbitMQ with -D" + HOST_PROPERTY + "=<host> [-D" + PORT_PROPERTY + "=5672].";
 
     private static final Endpoint RABBITMQ = resolveRabbitMQ();
 
     private record Endpoint(String host, int port) {}
 
     private static Endpoint resolveRabbitMQ() {
+        String externalHost = setting(HOST_PROPERTY, HOST_ENV);
+        if (externalHost != null) {
+            String externalPort = setting(PORT_PROPERTY, PORT_ENV);
+            int port = externalPort != null ? Integer.parseInt(externalPort) : AMQP_PORT;
+            log.info("Using external RabbitMQ at {}:{}", externalHost, port);
+            return new Endpoint(externalHost, port);
+        }
+
         if (!DockerClientFactory.instance().isDockerAvailable()) {
             log.warn(SKIP_MESSAGE);
             return null;
@@ -44,6 +55,14 @@ public abstract class RabbitMQContainerSupport extends RedisContainerSupport {
                                 .withStartupTimeout(Duration.ofMinutes(2)));
         container.start();
         return new Endpoint(container.getHost(), container.getMappedPort(AMQP_PORT));
+    }
+
+    private static String setting(String systemProperty, String environmentVariable) {
+        String value = System.getProperty(systemProperty);
+        if (value == null || value.isBlank()) {
+            value = System.getenv(environmentVariable);
+        }
+        return (value == null || value.isBlank()) ? null : value;
     }
 
     @BeforeAll

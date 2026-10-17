@@ -33,8 +33,8 @@ public abstract class RedisContainerSupport {
     public static final String TEST_KEY_PREFIX = "integration:test:";
 
     private static final String SKIP_MESSAGE =
-            "Nenhum Redis disponível para os testes de integração. Instale/inicie um Docker, ou aponte "
-                    + "para um Redis descartável com -D" + HOST_PROPERTY + "=<host> [-D" + PORT_PROPERTY + "=6379].";
+            "No Redis available for integration tests. Install/start Docker, or point "
+                    + "to a disposable Redis with -D" + HOST_PROPERTY + "=<host> [-D" + PORT_PROPERTY + "=6379].";
 
     private static final Endpoint REDIS = resolveRedis();
 
@@ -45,7 +45,7 @@ public abstract class RedisContainerSupport {
         if (externalHost != null) {
             String externalPort = setting(PORT_PROPERTY, PORT_ENV);
             int port = externalPort != null ? Integer.parseInt(externalPort) : REDIS_PORT;
-            log.info("Usando Redis externo em {}:{}", externalHost, port);
+            log.info("Using external Redis at {}:{}", externalHost, port);
             return new Endpoint(externalHost, port);
         }
 
