@@ -64,7 +64,7 @@ class GlobalExceptionHandlerTest {
     @DisplayName("Should handle NoResourceFoundException and return 404")
     void shouldHandleNoResourceFound() {
         when(request.getRequestURI()).thenReturn("/notfound");
-        NoResourceFoundException ex = new NoResourceFoundException(HttpMethod.GET, "/notfound");
+        NoResourceFoundException ex = new NoResourceFoundException(HttpMethod.GET, "/notfound", "notfound");
         ResponseEntity<ErrorResponse> response = handler.handleNoResourceFoundException(ex, request);
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         ErrorResponse body = response.getBody();

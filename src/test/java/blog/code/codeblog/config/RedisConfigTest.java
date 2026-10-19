@@ -4,9 +4,6 @@ import blog.code.codeblog.dto.PageResponseDTO;
 import blog.code.codeblog.dto.post.PostAuthorDTO;
 import blog.code.codeblog.dto.post.PostResponseDTO;
 import blog.code.codeblog.dto.user.UserResponseDTO;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,7 +16,9 @@ import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.nio.ByteBuffer;
@@ -45,7 +44,7 @@ class RedisConfigTest {
     private RedisConnectionFactory redisConnectionFactory;
 
     private RedisConfig config;
-    private ObjectMapper redisObjectMapper;
+    private JsonMapper redisObjectMapper;
 
     @BeforeEach
     void setUp() {
@@ -58,19 +57,14 @@ class RedisConfigTest {
 
 
     @Test
-    @DisplayName("objectMapper registers JavaTimeModule and writes dates as ISO strings")
-    void objectMapperRegistersJavaTimeModule() throws JsonProcessingException {
-        ObjectMapper mapper = config.objectMapper();
-
-        assertTrue(mapper.getRegisteredModuleIds().contains("jackson-datatype-jsr310"),
-                "JavaTimeModule should be registered, got " + mapper.getRegisteredModuleIds());
-        assertFalse(mapper.isEnabled(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS));
-        assertEquals("\"2024-05-10\"", mapper.writeValueAsString(LocalDate.of(2024, 5, 10)));
+    @DisplayName("redisObjectMapper writes java.time dates as ISO strings")
+    void redisObjectMapperWritesDatesAsIsoStrings() {
+        assertEquals("\"2024-05-10\"", redisObjectMapper.writeValueAsString(LocalDate.of(2024, 5, 10)));
     }
 
     @Test
     @DisplayName("redisObjectMapper writes the @class type id for project DTOs")
-    void redisObjectMapperWritesTypeId() throws JsonProcessingException {
+    void redisObjectMapperWritesTypeId() {
         UserResponseDTO dto = new UserResponseDTO(
                 UUID.randomUUID(), "User", "user@test.com", "http://pic", 1, 2);
 
@@ -82,7 +76,7 @@ class RedisConfigTest {
 
     @Test
     @DisplayName("redisObjectMapper round-trips a PageResponseDTO back into the concrete DTO types")
-    void redisObjectMapperRoundTripsPageResponseDTO() throws JsonProcessingException {
+    void redisObjectMapperRoundTripsPageResponseDTO() {
         PostResponseDTO post = new PostResponseDTO(
                 UUID.randomUUID(),
                 "Title",
@@ -119,7 +113,7 @@ class RedisConfigTest {
 
     @Test
     @DisplayName("redisObjectMapper allows java.util collections used by the caches")
-    void redisObjectMapperAllowsJavaUtilCollections() throws JsonProcessingException {
+    void redisObjectMapperAllowsJavaUtilCollections() {
         List<UserResponseDTO> list = new ArrayList<>(List.of(
                 new UserResponseDTO(UUID.randomUUID(), "User", "user@test.com", "http://pic", 1, 2)));
 
@@ -134,7 +128,7 @@ class RedisConfigTest {
     void redisObjectMapperRejectsTypesOutsideAllowlist() {
         String maliciousJson = "{\"@class\":\"java.io.File\",\"path\":\"/etc/passwd\"}";
 
-        assertThrows(JsonProcessingException.class,
+        assertThrows(JacksonException.class,
                 () -> redisObjectMapper.readValue(maliciousJson, Object.class),
                 "Types outside blog.code.codeblog/java.util must not be deserialized");
     }
@@ -144,16 +138,13 @@ class RedisConfigTest {
     @Test
     @DisplayName("redisTemplate returns template with correct serializers and connection factory")
     void redisTemplateReturnsTemplateWithCorrectSerializers() {
-        RedisTemplate<String, Object> template = config.redisTemplate(
-                redisConnectionFactory,
-                redisObjectMapper
-        );
+        RedisTemplate<String, Object> template = config.redisTemplate(redisConnectionFactory);
 
         assertNotNull(template);
         assertInstanceOf(StringRedisSerializer.class, template.getKeySerializer());
-        assertInstanceOf(GenericJackson2JsonRedisSerializer.class, template.getValueSerializer());
+        assertInstanceOf(GenericJacksonJsonRedisSerializer.class, template.getValueSerializer());
         assertInstanceOf(StringRedisSerializer.class, template.getHashKeySerializer());
-        assertInstanceOf(GenericJackson2JsonRedisSerializer.class, template.getHashValueSerializer());
+        assertInstanceOf(GenericJacksonJsonRedisSerializer.class, template.getHashValueSerializer());
         assertEquals(redisConnectionFactory, template.getConnectionFactory());
     }
 
@@ -271,7 +262,7 @@ class RedisConfigTest {
 
 
     private RedisCacheManager newCacheManager() {
-        RedisCacheManager manager = config.cacheManager(redisConnectionFactory, redisObjectMapper);
+        RedisCacheManager manager = config.cacheManager(redisConnectionFactory);
         manager.initializeCaches();
         return manager;
     }

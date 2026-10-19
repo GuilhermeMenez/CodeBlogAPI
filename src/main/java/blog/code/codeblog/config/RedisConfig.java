@@ -6,26 +6,25 @@ import blog.code.codeblog.dto.post.PostResponseDTO;
 import blog.code.codeblog.dto.user.UserFollowDTO;
 import blog.code.codeblog.dto.user.UserResponseDTO;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.lettuce.core.ClientOptions;
 import io.lettuce.core.SocketOptions;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.*;
+import tools.jackson.databind.DefaultTyping;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -91,42 +90,27 @@ public class RedisConfig {
         return new LettuceConnectionFactory(redisConfig, clientConfig);
     }
 
-    @Bean
-    public ObjectMapper objectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        return mapper;
-    }
-
-
-    @Bean(name = "redisObjectMapper")
-    public ObjectMapper redisObjectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-
+    // Não é @Bean: um bean JsonMapper impediria o Boot de auto-configurar o JsonMapper usado pelo MVC
+    public JsonMapper redisObjectMapper() {
         PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
                 .allowIfSubType("blog.code.codeblog")
                 .allowIfSubType("java.util")
                 .build();
 
-        mapper.activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
-
-        mapper.addMixIn(PageResponseDTO.class, RedisCacheMixin.class);
-        mapper.addMixIn(UserFollowDTO.class, RedisCacheMixin.class);
-        mapper.addMixIn(UserResponseDTO.class, RedisCacheMixin.class);
-        mapper.addMixIn(PostResponseDTO.class, RedisCacheMixin.class);
-        mapper.addMixIn(PostAuthorDTO.class,   RedisCacheMixin.class);
-
-        return mapper;
+        return JsonMapper.builder()
+                .activateDefaultTyping(ptv, DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY)
+                .addMixIn(PageResponseDTO.class, RedisCacheMixin.class)
+                .addMixIn(UserFollowDTO.class, RedisCacheMixin.class)
+                .addMixIn(UserResponseDTO.class, RedisCacheMixin.class)
+                .addMixIn(PostResponseDTO.class, RedisCacheMixin.class)
+                .addMixIn(PostAuthorDTO.class,   RedisCacheMixin.class)
+                .build();
     }
 
     @Bean
-    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory,
-                                                       @Qualifier("redisObjectMapper") ObjectMapper redisObjectMapper) {
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
 
-        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(redisObjectMapper);
+        GenericJacksonJsonRedisSerializer serializer = new GenericJacksonJsonRedisSerializer(redisObjectMapper());
 
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
@@ -140,10 +124,9 @@ public class RedisConfig {
     }
 
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory,
-                                          @Qualifier("redisObjectMapper") ObjectMapper redisObjectMapper) {
+    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
 
-        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(redisObjectMapper);
+        GenericJacksonJsonRedisSerializer serializer = new GenericJacksonJsonRedisSerializer(redisObjectMapper());
 
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .disableCachingNullValues()
@@ -162,7 +145,11 @@ public class RedisConfig {
         cacheConfigs.put(FEED_CACHE, defaultConfig.entryTtl(Duration.ofMinutes(2)));
 
 
-        return RedisCacheManager.builder(connectionFactory)
+
+        RedisCacheWriter cacheWriter = RedisCacheWriter.create(connectionFactory,
+                RedisCacheWriter.RedisCacheWriterConfigurer::immediateWrites);
+
+        return RedisCacheManager.builder(cacheWriter)
                 .cacheDefaults(defaultConfig.entryTtl(Duration.ofMinutes(10)))
                 .withInitialCacheConfigurations(cacheConfigs)
                 .build();
