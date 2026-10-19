@@ -48,7 +48,6 @@ spring:
           lob:
             non_contextual_creation: true
         format_sql: false
-        dialect: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: create
       show-sql: false

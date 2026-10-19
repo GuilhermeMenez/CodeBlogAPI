@@ -12,7 +12,7 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 
 import java.util.Map;
@@ -151,9 +151,9 @@ class RabbitMQConfigTest {
 
 
     @Test
-    @DisplayName("jsonMessageConverter returns a Jackson2JsonMessageConverter")
+    @DisplayName("jsonMessageConverter returns a JacksonJsonMessageConverter")
     void jsonMessageConverterIsJackson() {
-        assertInstanceOf(Jackson2JsonMessageConverter.class, config.jsonMessageConverter());
+        assertInstanceOf(JacksonJsonMessageConverter.class, config.jsonMessageConverter());
     }
 
     @Test

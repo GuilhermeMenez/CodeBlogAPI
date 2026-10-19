@@ -1,11 +1,11 @@
 package blog.code.codeblog.config.handlers;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.AuthenticationException;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -43,7 +43,7 @@ class CustomAuthenticationEntryPointTest {
         verify(response).setContentType("application/json");
         verify(response).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         String json = out.toString(StandardCharsets.UTF_8);
-        Map<?,?> map = new ObjectMapper().readValue(json, Map.class);
+        Map<?,?> map = JsonMapper.shared().readValue(json, Map.class);
         assertEquals("Unauthorized", map.get("error"));
         assertEquals("Full authentication is required", map.get("message"));
         assertEquals("/api/protected", map.get("path"));
