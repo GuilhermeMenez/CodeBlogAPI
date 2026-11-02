@@ -4,8 +4,11 @@ import blog.code.codeblog.command.user.*;
 import blog.code.codeblog.dto.user.UpdateUserResponseDTO;
 import blog.code.codeblog.enums.AuthFlow;
 import blog.code.codeblog.enums.FlowImageFlag;
+import blog.code.codeblog.enums.SearchEntityType;
+import blog.code.codeblog.enums.SearchIndexAction;
 import blog.code.codeblog.messaging.event.ImageUploadCompletedEvent;
 import blog.code.codeblog.messaging.event.ImageUploadEvent;
+import blog.code.codeblog.messaging.event.SearchIndexEvent;
 import blog.code.codeblog.messaging.event.UserFollowedEvent;
 import blog.code.codeblog.messaging.publisher.CloudinaryUploadPublisher;
 import blog.code.codeblog.messaging.publisher.UserFollowPublisher;
@@ -21,6 +24,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -48,6 +52,8 @@ class UserServiceTest {
     private CloudinaryUploadPublisher cloudinaryUploadPublisher;
     @Mock
     private UserFollowPublisher userFollowPublisher;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private UserService userService;
@@ -168,6 +174,7 @@ class UserServiceTest {
         verify(bCryptPasswordEncoder).encode("password123");
         verify(userRepository).save(any(User.class));
         verifyNoInteractions(cloudinaryUploadPublisher);
+        assertSearchIndexEvent(saved.getId(), SearchIndexAction.UPSERT, false);
     }
 
     @Test
@@ -261,6 +268,30 @@ class UserServiceTest {
         verify(bCryptPasswordEncoder).encode("newPassword");
 
         verifyNoMoreInteractions(userRepository);
+        assertSearchIndexEvent(id, SearchIndexAction.UPSERT, true);
+    }
+
+    @Test
+    @DisplayName("Should not reindex author posts when the name did not change")
+    void updateUserSameNameDoesNotReindexPosts() {
+        UUID id = UUID.randomUUID();
+
+        User existingUser = new User();
+        existingUser.setId(id);
+        existingUser.setName("Same Name");
+        existingUser.setLogin("old@email.com");
+
+        UpdateUserCommand command = UpdateUserCommand.builder()
+                .userId(id)
+                .name("Same Name")
+                .email("new@email.com")
+                .build();
+
+        when(userRepository.findById(id)).thenReturn(Optional.of(existingUser));
+
+        userService.updateUser(command);
+
+        assertSearchIndexEvent(id, SearchIndexAction.UPSERT, false);
     }
 
     @Test
@@ -289,6 +320,7 @@ class UserServiceTest {
         userService.deleteUser(command);
         verify(userRepository).existsById(id);
         verify(userRepository).deleteById(id);
+        assertSearchIndexEvent(id, SearchIndexAction.DELETE, false);
     }
 
     @Test
@@ -607,5 +639,16 @@ class UserServiceTest {
 
         assertEquals("User not found with id: " + userId, exception.getMessage());
         verify(userRepository).existsById(userId);
+    }
+
+    private void assertSearchIndexEvent(UUID userId, SearchIndexAction action, boolean reindexAuthorPosts) {
+        ArgumentCaptor<SearchIndexEvent> captor = ArgumentCaptor.forClass(SearchIndexEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        SearchIndexEvent event = captor.getValue();
+        assertEquals(SearchEntityType.USER, event.getEntityType());
+        assertEquals(userId, event.getEntityId());
+        assertEquals(action, event.getAction());
+        assertEquals(reindexAuthorPosts, event.isReindexAuthorPosts());
+        assertNotNull(event.getOccurredAt());
     }
 }

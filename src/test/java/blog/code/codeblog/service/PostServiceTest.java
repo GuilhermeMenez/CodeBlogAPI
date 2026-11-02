@@ -9,8 +9,11 @@ import blog.code.codeblog.command.post.PutPostCommand;
 import blog.code.codeblog.command.post.SavePostImageCommand;
 import blog.code.codeblog.dto.post.PostResponseDTO;
 import blog.code.codeblog.enums.FlowImageFlag;
+import blog.code.codeblog.enums.SearchEntityType;
+import blog.code.codeblog.enums.SearchIndexAction;
 import blog.code.codeblog.messaging.event.ImageUploadCompletedEvent;
 import blog.code.codeblog.messaging.event.ImageUploadEvent;
+import blog.code.codeblog.messaging.event.SearchIndexEvent;
 import blog.code.codeblog.messaging.publisher.CloudinaryUploadPublisher;
 import blog.code.codeblog.model.Comment;
 import blog.code.codeblog.model.Post;
@@ -26,6 +29,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -55,6 +59,8 @@ class PostServiceTest {
     private CloudinaryService cloudinaryService;
     @Mock
     private CloudinaryUploadPublisher cloudinaryUploadPublisher;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
     @InjectMocks
     private PostService postService;
 
@@ -93,6 +99,7 @@ class PostServiceTest {
         assertEquals(mockPost.getId().toString(), result);
         verify(postRepository).save(any(Post.class));
         verifyNoInteractions(cloudinaryUploadPublisher);
+        assertSearchIndexEvent(mockPost.getId(), SearchIndexAction.UPSERT);
     }
 
     @Test
@@ -194,6 +201,7 @@ class PostServiceTest {
         assertEquals(user.getName(), result.author().getName());
         verify(postRepository).findById(postId);
         verify(postRepository).save(any(Post.class));
+        assertSearchIndexEvent(postId, SearchIndexAction.UPSERT);
     }
 
     @Test
@@ -254,6 +262,7 @@ class PostServiceTest {
         assertDoesNotThrow(() -> postService.deletePost(command));
         verify(postRepository).findById(postId);
         verify(postRepository).deleteById(postId);
+        assertSearchIndexEvent(postId, SearchIndexAction.DELETE);
     }
 
     @Test
@@ -577,5 +586,16 @@ class PostServiceTest {
 
         assertEquals("No comments found for postId: " + postId, exception.getMessage());
         verify(commentRepository).findByPost_Id(eq(postId), any());
+    }
+
+    private void assertSearchIndexEvent(UUID postId, SearchIndexAction action) {
+        ArgumentCaptor<SearchIndexEvent> captor = ArgumentCaptor.forClass(SearchIndexEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        SearchIndexEvent event = captor.getValue();
+        assertEquals(SearchEntityType.POST, event.getEntityType());
+        assertEquals(postId, event.getEntityId());
+        assertEquals(action, event.getAction());
+        assertFalse(event.isReindexAuthorPosts());
+        assertNotNull(event.getOccurredAt());
     }
 }

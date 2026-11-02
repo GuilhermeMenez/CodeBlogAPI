@@ -8,10 +8,13 @@ import blog.code.codeblog.dto.user.UserFollowDTO;
 import blog.code.codeblog.dto.user.UserResponseDTO;
 import blog.code.codeblog.enums.AuthFlow;
 import blog.code.codeblog.enums.FlowImageFlag;
+import blog.code.codeblog.enums.SearchEntityType;
+import blog.code.codeblog.enums.SearchIndexAction;
 import blog.code.codeblog.mapper.PageMapper;
 import blog.code.codeblog.mapper.UserMapper;
 import blog.code.codeblog.messaging.event.ImageUploadCompletedEvent;
 import blog.code.codeblog.messaging.event.ImageUploadEvent;
+import blog.code.codeblog.messaging.event.SearchIndexEvent;
 import blog.code.codeblog.messaging.event.UserFollowedEvent;
 import blog.code.codeblog.messaging.publisher.CloudinaryUploadPublisher;
 import blog.code.codeblog.messaging.publisher.UserFollowPublisher;
@@ -26,6 +29,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -61,6 +65,9 @@ public class UserService implements UserServiceInterface {
 
     @Autowired
     UserFollowPublisher userFollowPublisher;
+
+    @Autowired
+    ApplicationEventPublisher eventPublisher;
 
     @Override
     public Optional<User> findById(UUID id) {
@@ -106,6 +113,7 @@ public class UserService implements UserServiceInterface {
 
         User newUser = UserMapper.toUserEntity(user);
         userRepository.save(newUser);
+        publishSearchIndex(SearchEntityType.USER, newUser.getId(), SearchIndexAction.UPSERT, false);
 
         log.info("[saveUser] User saved successfully. login: {}", user.getEmail());
 
@@ -141,10 +149,14 @@ public class UserService implements UserServiceInterface {
                     return new EntityNotFoundException("User not found");
                 });
 
+        boolean nameChanged = command.getName() != null && !command.getName().equals(existingUser.getName());
+
         if (command.getName() != null) existingUser.setName(command.getName());
         if (command.getEmail() != null) existingUser.setLogin(command.getEmail());
         if (command.getPassword() != null) existingUser.setPassword(bCryptPasswordEncoder.encode(command.getPassword()));
 
+        // nameChanged: o authorName está copiado em cada PostDocument, então os posts do autor também são reindexados
+        publishSearchIndex(SearchEntityType.USER, existingUser.getId(), SearchIndexAction.UPSERT, nameChanged);
         log.info("[updateUser] User updated successfully. id: {}", command.getUserId());
         return UserMapper.toUpdateUserResponseDTO(existingUser);
     }
@@ -163,7 +175,15 @@ public class UserService implements UserServiceInterface {
             throw new EntityNotFoundException("User not found with id: " + command.getUserId());
         }
         userRepository.deleteById(command.getUserId());
+        publishSearchIndex(SearchEntityType.USER, command.getUserId(), SearchIndexAction.DELETE, false);
         log.info("[deleteUser] User deleted successfully. id: {}", command.getUserId());
+    }
+
+    private void publishSearchIndex(SearchEntityType type, UUID id, SearchIndexAction action, boolean reindexAuthorPosts) {
+        eventPublisher.publishEvent(SearchIndexEvent.builder()
+                .entityType(type).entityId(id).action(action)
+                .reindexAuthorPosts(reindexAuthorPosts)
+                .occurredAt(LocalDateTime.now()).build());
     }
 
 

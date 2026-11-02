@@ -18,11 +18,22 @@ spring:
       port: "${REDIS_PORT:6379}"
       username: "${REDIS_USERNAME:default}"
       password: "${REDIS_PASSWORD:}"
+  elasticsearch:
+    uris: "${ELASTICSEARCH_URIS:http://localhost:9200}"
   rabbitmq:
     listener:
       simple:
         default-requeue-rejected: false
         auto-startup: false
+
+management:
+  health:
+    elasticsearch:
+      enabled: false
+
+app:
+  search:
+    bootstrap-reindex: false
 
 api:
   security:

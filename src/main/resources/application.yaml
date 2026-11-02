@@ -17,12 +17,18 @@ app:
     queue:
       follow: user.follow.notification.queue
       image-upload: image.upload.queue
+      search-index: search.index.queue
     dlq:
       follow: user.follow.notification.dlq
       image-upload: image.upload.dlq
+      search-index: search.index.dlq
     routing-key:
       follow: user.followed
       image-upload: image.upload
+      search-index: search.index
+  search:
+    bootstrap-reindex: true
+    reindex-batch-size: 500
 ---
 spring:
   config:
@@ -59,6 +65,10 @@ spring:
       password: "${REDIS_PASSWORD:}"
       ssl:
         enabled: "${REDIS_SSL:false}"
+  elasticsearch:
+    uris: "${ELASTICSEARCH_URIS}"
+    username: "${ELASTICSEARCH_USERNAME:}"
+    password: "${ELASTICSEARCH_PASSWORD:}"
   rabbitmq:
     host: "${RABBITMQ_HOST:localhost}"
     port: "${RABBITMQ_PORT:5672}"
@@ -91,6 +101,8 @@ management:
     db:
       enabled: true
     redis:
+      enabled: true
+    elasticsearch:
       enabled: true
 
 logging:

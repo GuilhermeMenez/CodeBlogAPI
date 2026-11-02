@@ -30,6 +30,9 @@ class RabbitMQConfigTest {
     private static final String IMAGE_UPLOAD_DLQ = "image.upload.dlq";
     private static final String FOLLOW_ROUTING_KEY = "user.followed";
     private static final String IMAGE_UPLOAD_ROUTING_KEY = "image.upload";
+    private static final String SEARCH_INDEX_QUEUE = "search.index.queue";
+    private static final String SEARCH_INDEX_DLQ = "search.index.dlq";
+    private static final String SEARCH_INDEX_ROUTING_KEY = "search.index";
 
     @Mock
     private ConnectionFactory connectionFactory;
@@ -47,6 +50,9 @@ class RabbitMQConfigTest {
         setField(config, "imageUploadQueue", IMAGE_UPLOAD_QUEUE);
         setField(config, "followDlq", FOLLOW_DLQ);
         setField(config, "imageUploadDlq", IMAGE_UPLOAD_DLQ);
+        setField(config, "searchIndexRoutingKey", SEARCH_INDEX_ROUTING_KEY);
+        setField(config, "searchIndexQueue", SEARCH_INDEX_QUEUE);
+        setField(config, "searchIndexDlq", SEARCH_INDEX_DLQ);
     }
 
 
@@ -141,12 +147,47 @@ class RabbitMQConfigTest {
     }
 
     @Test
+    @DisplayName("searchIndexQueue is durable and dead-letters to the search index DLQ")
+    void searchIndexQueueDeadLettersToSearchIndexDlq() {
+        Queue queue = config.searchIndexQueue();
+
+        assertDurableQueue(queue, SEARCH_INDEX_QUEUE);
+        assertEquals(Map.of(
+                        "x-dead-letter-exchange", DEAD_LETTER_EXCHANGE,
+                        "x-dead-letter-routing-key", SEARCH_INDEX_DLQ),
+                queue.getArguments());
+    }
+
+    @Test
+    @DisplayName("searchIndexDeadLetterQueue is durable and has no dead-letter arguments")
+    void searchIndexDeadLetterQueueIsPlainDurableQueue() {
+        Queue queue = config.searchIndexDeadLetterQueue();
+
+        assertDurableQueue(queue, SEARCH_INDEX_DLQ);
+        assertTrue(queue.getArguments().isEmpty());
+    }
+
+    @Test
+    @DisplayName("searchIndexBinding routes the search index routing key from the events exchange to the search index queue")
+    void searchIndexBindingRoutesToSearchIndexQueue() {
+        assertQueueBinding(config.searchIndexBinding(), SEARCH_INDEX_QUEUE, EXCHANGE, SEARCH_INDEX_ROUTING_KEY);
+    }
+
+    @Test
+    @DisplayName("searchIndexDlqBinding routes the search index DLQ key from the DLX to the search index DLQ")
+    void searchIndexDlqBindingRoutesToSearchIndexDlq() {
+        assertQueueBinding(config.searchIndexDlqBinding(), SEARCH_INDEX_DLQ, DEAD_LETTER_EXCHANGE, SEARCH_INDEX_DLQ);
+    }
+
+    @Test
     @DisplayName("dead-letter routing key of each main queue matches its DLQ binding")
     void deadLetterRoutingKeysMatchDlqBindings() {
         assertEquals(config.followDlqBinding().getRoutingKey(),
                 config.followNotificationQueue().getArguments().get("x-dead-letter-routing-key"));
         assertEquals(config.imageUploadDlqBinding().getRoutingKey(),
                 config.imageUploadQueue().getArguments().get("x-dead-letter-routing-key"));
+        assertEquals(config.searchIndexDlqBinding().getRoutingKey(),
+                config.searchIndexQueue().getArguments().get("x-dead-letter-routing-key"));
     }
 
 
