@@ -27,6 +27,8 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.data.elasticsearch.UncategorizedElasticsearchException;
 
 
 @RestControllerAdvice
@@ -222,6 +224,18 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+
+    @ExceptionHandler({DataAccessResourceFailureException.class, UncategorizedElasticsearchException.class})
+    public ResponseEntity<ErrorResponse> handleSearchUnavailable(Exception ex, HttpServletRequest request) {
+        log.error("Search engine unavailable: {}", ex.getMessage());
+        ErrorResponse response = createErrorResponse(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Search temporarily unavailable",
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
     }
 
 

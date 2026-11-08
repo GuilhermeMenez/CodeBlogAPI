@@ -9,8 +9,11 @@ import blog.code.codeblog.dto.cloudinary.ImageUploadResponseDTO;
 import blog.code.codeblog.dto.comment.CommentResponseDTO;
 import blog.code.codeblog.dto.post.PostResponseDTO;
 import blog.code.codeblog.enums.FlowImageFlag;
+import blog.code.codeblog.enums.SearchEntityType;
+import blog.code.codeblog.enums.SearchIndexAction;
 import blog.code.codeblog.messaging.event.ImageUploadCompletedEvent;
 import blog.code.codeblog.messaging.event.ImageUploadEvent;
+import blog.code.codeblog.messaging.event.SearchIndexEvent;
 import blog.code.codeblog.messaging.publisher.CloudinaryUploadPublisher;
 import blog.code.codeblog.model.Comment;
 import blog.code.codeblog.model.Post;
@@ -26,6 +29,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -58,6 +62,8 @@ public class PostService implements PostServiceInterface {
     UserFollowRepository userFollowRepository;
     @Autowired
     CloudinaryUploadPublisher cloudinaryUploadPublisher;
+    @Autowired
+    ApplicationEventPublisher eventPublisher;
 
     @Override
     public List<PostResponseDTO> findAll() {
@@ -107,6 +113,7 @@ public class PostService implements PostServiceInterface {
     })
     public String createPost(CreatePostCommand postCommand){
         Post savedPost = save(postCommand);
+        publishSearchIndex(SearchEntityType.POST, savedPost.getId(), SearchIndexAction.UPSERT, false);
         try {
             processImages(savedPost, postCommand.getImages(), postCommand.getAuthor());
         } catch (IOException e) {
@@ -136,6 +143,7 @@ public class PostService implements PostServiceInterface {
         log.info("[deletePost] Attempting to delete post. postId: {}", deletePostCommand.getPostId());
         Post post = getUserPost(deletePostCommand.getPostId(), deletePostCommand.getAuthorId());
         postRepository.deleteById(post.getId());
+        publishSearchIndex(SearchEntityType.POST, post.getId(), SearchIndexAction.DELETE, false);
         log.info("[deletePost] Post deleted successfully. postId: {}", post.getId());
     }
 
@@ -152,6 +160,7 @@ public class PostService implements PostServiceInterface {
         existingPost.setContent(putPostCommand.getContent());
         existingPost.setDate(LocalDate.now());
         postRepository.save(existingPost);
+        publishSearchIndex(SearchEntityType.POST, existingPost.getId(), SearchIndexAction.UPSERT, false);
         log.info("[updatePost] Post updated successfully. postId: {}", existingPost.getId());
         return PostMapper.toPostResponseDTO(existingPost);
     }
@@ -222,6 +231,13 @@ public class PostService implements PostServiceInterface {
             throw new AccessDeniedException("User not authorized for this action");
         }
         return post;
+    }
+
+    private void publishSearchIndex(SearchEntityType type, UUID id, SearchIndexAction action, boolean reindexAuthorPosts) {
+        eventPublisher.publishEvent(SearchIndexEvent.builder()
+                .entityType(type).entityId(id).action(action)
+                .reindexAuthorPosts(reindexAuthorPosts)
+                .occurredAt(LocalDateTime.now()).build());
     }
 
 

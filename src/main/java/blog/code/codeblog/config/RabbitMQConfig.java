@@ -29,6 +29,9 @@ public class RabbitMQConfig {
     @Value("${app.rabbitmq.routing-key.image-upload}")
     private String imageUploadRoutingKey;
 
+    @Value("${app.rabbitmq.routing-key.search-index}")
+    private String searchIndexRoutingKey;
+
 
     @Value("${app.rabbitmq.queue.follow}")
     private String followQueue;
@@ -36,12 +39,18 @@ public class RabbitMQConfig {
     @Value("${app.rabbitmq.queue.image-upload}")
     private String imageUploadQueue;
 
+    @Value("${app.rabbitmq.queue.search-index}")
+    private String searchIndexQueue;
+
 
     @Value("${app.rabbitmq.dlq.follow}")
     private String followDlq;
 
     @Value("${app.rabbitmq.dlq.image-upload}")
     private String imageUploadDlq;
+
+    @Value("${app.rabbitmq.dlq.search-index}")
+    private String searchIndexDlq;
 
     @Bean
     public TopicExchange userEventsExchange() {
@@ -108,6 +117,33 @@ public class RabbitMQConfig {
                 .with(imageUploadDlq);
     }
 
+
+    @Bean
+    public Queue searchIndexQueue() {
+        return queueWithDeadLetter(searchIndexQueue, searchIndexDlq);
+    }
+
+    @Bean
+    public Queue searchIndexDeadLetterQueue() {
+        return QueueBuilder.durable(searchIndexDlq).build();
+    }
+
+    @Bean
+    public Binding searchIndexBinding() {
+        return BindingBuilder
+                .bind(searchIndexQueue())
+                .to(userEventsExchange())
+                .with(searchIndexRoutingKey);
+    }
+
+    @Bean
+    public Binding searchIndexDlqBinding() {
+        return BindingBuilder
+                .bind(searchIndexDeadLetterQueue())
+                .to(deadLetterExchange())
+                .with(searchIndexDlq);
+    }
+
     private Queue queueWithDeadLetter(String queueName, String dlqName) {
         return QueueBuilder.durable(queueName)
                 .withArgument("x-dead-letter-exchange", deadLetterExchange)
@@ -117,13 +153,11 @@ public class RabbitMQConfig {
 
     @Bean
     public MessageConverter jsonMessageConverter() {
-        // o converter do Jackson 3 só confia em java.util/java.lang por padrão
         return new JacksonJsonMessageConverter("blog.code.codeblog.messaging.event");
     }
 
     @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory,
-                                         MessageConverter jsonMessageConverter) {
+    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory, MessageConverter jsonMessageConverter) {
         RabbitTemplate template = new RabbitTemplate(connectionFactory);
         template.setMessageConverter(jsonMessageConverter);
         return template;
